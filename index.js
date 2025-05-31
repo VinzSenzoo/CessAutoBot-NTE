@@ -9,11 +9,9 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { ethers } from 'ethers';
 
-// --- CONFIG ---
-const RPC_URL = "https://eth.merkle.io/"; // Ganti dengan RPC URL Anda (contoh: Infura key)
-const PLATFORM = "okex"; // Sesuaikan dengan platform yang benar jika perlu
+const RPC_URL = "https://eth.merkle.io/"; 
+const PLATFORM = "okex";
 
-// --- HELPER FUNCTIONS ---
 function delay(seconds) {
   return new Promise(resolve => setTimeout(resolve, seconds * 1000));
 }
@@ -148,7 +146,7 @@ Issued At: ${issuedAt}`;
       config
     );
     if (res.data.code === 200) {
-      return res.data.data; // Token dari response
+      return res.data.data;
     } else {
       throw new Error(`Login gagal: ${res.data.msg}`);
     }
