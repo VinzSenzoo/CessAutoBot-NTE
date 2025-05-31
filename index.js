@@ -7,7 +7,13 @@ import readline from 'readline';
 import FormData from 'form-data';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import { ethers } from 'ethers';
 
+// --- CONFIG ---
+const RPC_URL = "https://eth.merkle.io/"; // Ganti dengan RPC URL Anda (contoh: Infura key)
+const PLATFORM = "okex"; // Sesuaikan dengan platform yang benar jika perlu
+
+// --- HELPER FUNCTIONS ---
 function delay(seconds) {
   return new Promise(resolve => setTimeout(resolve, seconds * 1000));
 }
@@ -95,12 +101,68 @@ async function requestWithRetry(method, url, payload = null, config = {}, retrie
   }
 }
 
-async function readTokens() {
+function makeNonce(platform, timestampMs) {
+  return Buffer.from(`${platform}-${timestampMs}`).toString("hex");
+}
+
+function makeIssuedAt(timestampMs) {
+  return new Date(timestampMs).toISOString();
+}
+
+async function getTokenFromPrivateKey(privateKey, proxy = null) {
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
+  const wallet = new ethers.Wallet(privateKey, provider);
+  const address = await wallet.getAddress();
+
+  const uri = "https://cess.network/deshareairdrop";
+  const version = "1";
+  const timestampMs = Date.now();
+  const nonce = makeNonce(PLATFORM, timestampMs);
+  const issuedAt = makeIssuedAt(timestampMs);
+
+  const message = `cess.network wants you to sign in with your account address:
+${address}
+
+Sign in to the app. Powered by cess.network Solutions.
+
+URI: ${uri}
+Version: ${version}
+Nonce: ${nonce}
+Issued At: ${issuedAt}`;
+
+  const signature = await wallet.signMessage(message);
+
+  const payload = {
+    account: address,
+    platform: PLATFORM,
+    message,
+    sign: signature
+  };
+
+  const config = getAxiosConfig(proxy, null, false);
+
   try {
-    const data = await fs.readFile('token.txt', 'utf-8');
+    const res = await axios.post(
+      "https://merklev2.cess.network/merkle/wlogin",
+      payload,
+      config
+    );
+    if (res.data.code === 200) {
+      return res.data.data; // Token dari response
+    } else {
+      throw new Error(`Login gagal: ${res.data.msg}`);
+    }
+  } catch (err) {
+    throw new Error(`Error login: ${err.message}`);
+  }
+}
+
+async function readPrivateKeys() {
+  try {
+    const data = await fs.readFile('pk.txt', 'utf-8');
     return data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   } catch (error) {
-    console.error(chalk.red(`Error membaca token.txt: ${error.message}`));
+    console.error(chalk.red(`Error membaca pk.txt: ${error.message}`));
     return [];
   }
 }
@@ -251,16 +313,17 @@ async function processToken(token, index, total, proxy = null) {
 }
 
 async function runCycle() {
-  const tokens = await readTokens();
-  if (tokens.length === 0) {
-    console.log(chalk.red('Tidak ada token di token.txt.'));
+  const privateKeys = await readPrivateKeys();
+  if (privateKeys.length === 0) {
+    console.log(chalk.red('Tidak ada private key di pk.txt.'));
     return;
   }
 
-  for (let i = 0; i < tokens.length; i++) {
+  for (let i = 0; i < privateKeys.length; i++) {
     const proxy = globalUseProxy ? globalProxies[i % globalProxies.length] : null;
     try {
-      await processToken(tokens[i], i, tokens.length, proxy);
+      const token = await getTokenFromPrivateKey(privateKeys[i], proxy);
+      await processToken(token, i, privateKeys.length, proxy);
     } catch (error) {
       console.error(chalk.red(`Error pada akun ${i + 1}: ${error.message}`));
     }
